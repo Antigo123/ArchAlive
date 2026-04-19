@@ -1,0 +1,11 @@
+node_modules
+.git
+.vercel
+.vercel_backup
+simulation/target
+client/node_modules
+client/dist
+wasm-pack.log
+*.wasm
+!simulation/pkg/*.wasm
+!client/public/wasm/*.wasm

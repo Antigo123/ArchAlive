@@ -1,0 +1,73 @@
+# ArchAlive
+
+ArchAlive is an interactive, browser-based system architecture simulator. Build cloud infrastructure topologies with drag-and-drop components — load balancers, API gateways, servers, databases, and more — then watch real traffic flow through your design in real time.
+
+## Features
+
+- **Visual Architecture Builder** — Drag-and-drop canvas for assembling complex system topologies.
+- **Real-Time Simulation** — High-performance WebAssembly (Rust) engine simulates thousands of requests per second directly in the browser.
+- **Guided Scenarios** — Structured chapters with progressive puzzles covering fault tolerance, load balancing, caching, and more.
+- **Live Performance Metrics** — Throughput, latency, and resource utilization stats update as the simulation runs.
+
+## Technology Stack
+
+| Layer | Technologies |
+|---|---|
+| Frontend | React, TypeScript, Vite, TailwindCSS, PixiJS |
+| Simulation Engine | Rust → WebAssembly (via `wasm-pack`) |
+
+## Project Structure
+
+```
+ArchAlive/
+├── client/          # React frontend (Vite)
+│   └── src/
+│       ├── components/   # UI components
+│       └── puzzles/      # Scenario definitions
+├── simulation/      # Rust simulation engine
+│   └── src/
+│       └── engine.rs
+└── package.json     # Root build scripts
+```
+
+## Development Setup
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org/) v18+
+- [Rust](https://rustup.rs/) (latest stable)
+- [`wasm-pack`](https://rustwasm.github.io/wasm-pack/) — installed automatically via `npm install`
+
+### Getting Started
+
+1. **Build the Rust simulation engine**
+
+   ```bash
+   cd simulation && wasm-pack build --target web --out-dir pkg
+   ```
+
+2. **Install frontend dependencies**
+
+   ```bash
+   cd client && npm install
+   ```
+
+3. **Start the development server**
+
+   ```bash
+   npm run dev
+   ```
+
+4. **Open in browser**
+
+   Navigate to `http://localhost:5173` (or the port Vite prints).
+
+> After editing Rust code, re-run step 1 to rebuild the WASM package.
+
+## Production Build
+
+```bash
+npm run build
+```
+
+Runs the wasm-pack build, installs client dependencies, and outputs to `client/dist/`.

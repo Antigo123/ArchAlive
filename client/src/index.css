@@ -1,0 +1,266 @@
+@import "tailwindcss";
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Roboto:wght@400;500;700&display=swap');
+
+:root {
+  font-family: 'Inter', system-ui, Avenir, Helvetica, Arial, sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  --google-blue: #1a73e8;
+  --google-red: #ea4335;
+  --google-yellow: #fbbc04;
+  --google-green: #34a853;
+  --google-gray: #f1f3f4;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background-color: #f0f2f5;
+  color: #202124;
+}
+
+/* Hide default React Flow selection bounding box around groups */
+.react-flow__nodesselection-rect {
+  display: none !important;
+}
+
+/* Remove default React Flow node wrapper styling */
+.react-flow__node {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+/* Connection handle base size — matches previous !w-3/!w-2.5 visual */
+.react-flow__handle {
+  width: 12px !important;
+  height: 12px !important;
+  border-radius: 50% !important;
+}
+
+/* Touch devices: larger handles for finger targeting.
+   !w-X/!h-X Tailwind classes have been removed from Handle elements so
+   this rule (0,2,0 specificity) wins cleanly without a layer conflict. */
+[data-touch] .react-flow__handle {
+  width: 28px !important;
+  height: 28px !important;
+  z-index: 10 !important;
+}
+
+/* Re-centre handles so they sit at the node edge (not overlapping inward).
+   CSS !important overrides the inline style={{ left: -6 }} on Handle elements.
+   translateY nudge shifts the enlarged circle down to visually align with the row label. */
+[data-touch] .react-flow__handle-left {
+  left: -14px !important;
+  transform: translate(-50%, calc(-50% + 6px)) !important;
+}
+[data-touch] .react-flow__handle-right {
+  right: -14px !important;
+  transform: translate(50%, calc(-50% + 6px)) !important;
+}
+
+@media (max-width: 400px) {
+  [data-touch] .react-flow__handle {
+    width: 24px !important;
+    height: 24px !important;
+  }
+  [data-touch] .react-flow__handle-left {
+    left: -12px !important;
+    transform: translate(-50%, calc(-50% + 5px)) !important;
+  }
+  [data-touch] .react-flow__handle-right {
+    right: -12px !important;
+    transform: translate(50%, calc(-50% + 5px)) !important;
+  }
+}
+
+/* Connection Success Animation */
+@keyframes connection-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+
+  50% {
+    transform: scale(1.5);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(2);
+    opacity: 0;
+  }
+}
+
+.connection-success-ripple {
+  position: fixed;
+  pointer-events: none;
+  z-index: 9999;
+  width: 0;
+  height: 0;
+  transform: translate(-50%, -50%);
+  animation: connection-ripple 0.8s ease-out forwards;
+}
+
+.connection-success-ripple::before,
+.connection-success-ripple::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  border: 3px solid #22c55e;
+  animation: ripple-expand 0.8s ease-out forwards;
+}
+
+.connection-success-ripple::after {
+  animation-delay: 0.15s;
+}
+
+@keyframes ripple-expand {
+  0% {
+    width: 0;
+    height: 0;
+    opacity: 1;
+    border-width: 3px;
+  }
+
+  100% {
+    width: 80px;
+    height: 80px;
+    opacity: 0;
+    border-width: 1px;
+  }
+}
+
+/* Enhanced Connection Lines - Thicker with subtle glow */
+.react-flow__edge-path {
+  stroke-width: 2px !important;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.1));
+}
+
+.react-flow__edge:hover .react-flow__edge-path {
+  stroke-width: 3px !important;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.15));
+}
+
+/* Animated Selection Glow */
+@keyframes selection-glow {
+
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15),
+      0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+
+  50% {
+    box-shadow: 0 0 0 5px rgba(59, 130, 246, 0.1),
+      0 4px 12px rgba(0, 0, 0, 0.08);
+  }
+}
+
+/* Node hover enhancement base class */
+.node-card-enhanced {
+  transition: transform 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.node-card-enhanced:hover {
+  transform: translateY(-2px);
+}
+
+/* Mobile Support */
+@media (max-width: 768px) {
+  body {
+    overscroll-behavior: none; /* Prevent pull-to-refresh / bounce on mobile */
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* (handle sizing moved to [data-touch] rule below for correct specificity) */
+
+  /* Thicker edges for touch selection */
+  .react-flow__edge-path {
+    stroke-width: 3px !important;
+  }
+
+  /* Make sure the main container doesn't overflow */
+  #root {
+    overflow: hidden;
+    position: fixed;
+    width: 100%;
+    height: 100%;
+    /* Safe area support for notched devices */
+    padding-bottom: env(safe-area-inset-bottom, 0);
+  }
+
+  /* Prevent text selection on interactive elements during touch */
+  button, [draggable], .react-flow__node {
+    -webkit-user-select: none;
+    user-select: none;
+    -webkit-touch-callout: none;
+  }
+
+  /* Ensure buttons have minimum touch target size */
+  button {
+    min-height: 36px;
+    min-width: 36px;
+  }
+
+  /* Aggressive scaling for very small phones */
+  @media (max-width: 400px) {
+    :root {
+      font-size: 14px; /* Scale down base font size from 16px */
+    }
+
+    /* (handle sizing moved to [data-touch] rule below for correct specificity) */
+
+    /* Narrower edges */
+    .react-flow__edge-path {
+      stroke-width: 2.5px !important;
+    }
+  }
+
+  /* Placement Mode Animations */
+  @keyframes mobile-bounce {
+    0%, 100% { transform: translate(-50%, 0); }
+    50% { transform: translate(-50%, -8px); }
+  }
+
+  .animate-bounce {
+    animation: mobile-bounce 2s ease-in-out infinite;
+  }
+}
+
+/* Fix for touch-action on the pane */
+.react-flow__pane {
+  touch-action: none;
+}
+
+/* Custom Premium Animations */
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 10px 15px -3px rgba(99, 102, 241, 0.2);
+  }
+  50% {
+    opacity: 0.9;
+    transform: scale(1.05);
+    box-shadow: 0 20px 25px -5px rgba(99, 102, 241, 0.3);
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
