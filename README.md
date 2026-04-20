@@ -1,5 +1,7 @@
 <img width="1148" height="603" alt="archalivegif" src="https://github.com/user-attachments/assets/b332b054-946e-46cc-a09c-aa41123dc6eb" />
 
+**Play it live at: [https://archalive.com/](https://archalive.com/)**
+
 ArchAlive is an interactive, browser-based system architecture simulator. Build cloud infrastructure topologies with drag-and-drop components — load balancers, API gateways, servers, databases, and more — then watch real traffic flow through your design in real time.
 
 ## Features
