@@ -2,7 +2,7 @@
 
 **Play it live at: [https://archalive.com/](https://archalive.com/)**
 
-ArchAlive is an interactive, browser-based system architecture simulator. Build cloud infrastructure topologies with drag-and-drop components — load balancers, API gateways, servers, databases, and more — then watch real traffic flow through your design in real time.
+ArchAlive turns static architecture into living infrastructure. Build complex cloud topologies using a suite of drag-and-drop components including load balancers and API gateways, then leverage a high-performance WebAssembly engine to simulate and visualize real-time traffic flow across your entire design.
 
 ## Features
 
