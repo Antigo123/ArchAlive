@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { Info, Mail, X } from 'lucide-react';
+import { Info, Mail, X, Github } from 'lucide-react';
 
 export function AboutPopover() {
     const [isOpen, setIsOpen] = useState(false);
@@ -79,22 +79,37 @@ export function AboutPopover() {
                     {/* Divider */}
                     <div className="mx-5 h-px bg-slate-100" />
 
-                    {/* Feedback */}
+                    {/* Feedback & Open Source */}
                     <div className="px-5 py-4">
                         <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
-                            Feedback & Contact
+                            Feedback & Open Source
                         </span>
-                        <a
-                            href="mailto:antigo1993@gmail.com"
-                            className="mt-2 flex items-center gap-2.5 group"
-                        >
-                            <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-indigo-50 group-hover:bg-indigo-100 flex items-center justify-center transition-colors">
-                                <Mail size={13} className="text-indigo-500" />
-                            </div>
-                            <span className="text-[12.5px] font-medium text-slate-600 group-hover:text-indigo-600 transition-colors">
-                                antigo1993@gmail.com
-                            </span>
-                        </a>
+                        <div className="mt-2 flex flex-col gap-2">
+                            <a
+                                href="mailto:antigo1993@gmail.com"
+                                className="flex items-center gap-2.5 group"
+                            >
+                                <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-indigo-50 group-hover:bg-indigo-100 flex items-center justify-center transition-colors">
+                                    <Mail size={13} className="text-indigo-500" />
+                                </div>
+                                <span className="text-[12.5px] font-medium text-slate-600 group-hover:text-indigo-600 transition-colors">
+                                    antigo1993@gmail.com
+                                </span>
+                            </a>
+                            <a
+                                href="https://github.com/Antigo123/ArchAlive"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2.5 group"
+                            >
+                                <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-slate-50 group-hover:bg-slate-100 flex items-center justify-center transition-colors">
+                                    <Github size={13} className="text-slate-600 group-hover:text-slate-900" />
+                                </div>
+                                <span className="text-[12.5px] font-medium text-slate-600 group-hover:text-slate-900 transition-colors">
+                                    github.com/Antigo123/ArchAlive
+                                </span>
+                            </a>
+                        </div>
                     </div>
                 </div>
             )}
