@@ -9,5 +9,6 @@ wasm-pack build --target web --out-dir pkg
 cd ..
 
 # Build Client
+rm -rf client/node_modules/simulation
 npm install --prefix client
 npm run build --prefix client
