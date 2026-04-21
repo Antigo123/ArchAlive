@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { BookOpen, ArrowRight, Layers, Info, ArrowLeft, Mail } from 'lucide-react';
+import { BookOpen, ArrowRight, Layers, Info, ArrowLeft, Mail, Github } from 'lucide-react';
 
 interface WelcomeModalProps {
     isOpen: boolean;
@@ -72,21 +72,36 @@ export function WelcomeModal({ isOpen, onStartTutorial, onSkip }: WelcomeModalPr
                         {/* Divider */}
                         <div className="w-full h-px bg-slate-100 my-3" />
 
-                        {/* Feedback */}
+                        {/* Feedback & Open Source */}
                         <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">
-                            Feedback & Contact
+                            Feedback & Open Source
                         </span>
-                        <a
-                            href="mailto:antigo1993@gmail.com"
-                            className="mt-2 flex items-center gap-2.5 group"
-                        >
-                            <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-indigo-50 group-hover:bg-indigo-100 flex items-center justify-center transition-colors">
-                                <Mail size={13} className="text-indigo-500" />
-                            </div>
-                            <span className="text-[12.5px] font-medium text-slate-600 group-hover:text-indigo-600 transition-colors">
-                                antigo1993@gmail.com
-                            </span>
-                        </a>
+                        <div className="mt-2 flex flex-col gap-2">
+                            <a
+                                href="mailto:antigo1993@gmail.com"
+                                className="flex items-center gap-2.5 group"
+                            >
+                                <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-indigo-50 group-hover:bg-indigo-100 flex items-center justify-center transition-colors">
+                                    <Mail size={13} className="text-indigo-500" />
+                                </div>
+                                <span className="text-[12.5px] font-medium text-slate-600 group-hover:text-indigo-600 transition-colors">
+                                    antigo1993@gmail.com
+                                </span>
+                            </a>
+                            <a
+                                href="https://github.com/Antigo123/ArchAlive"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2.5 group"
+                            >
+                                <div className="flex-shrink-0 w-7 h-7 rounded-lg bg-slate-50 group-hover:bg-slate-100 flex items-center justify-center transition-colors">
+                                    <Github size={13} className="text-slate-600 group-hover:text-slate-900" />
+                                </div>
+                                <span className="text-[12.5px] font-medium text-slate-600 group-hover:text-slate-900 transition-colors">
+                                    github.com/Antigo123/ArchAlive
+                                </span>
+                            </a>
+                        </div>
                     </div>
                 ) : (
                     /* ============ MAIN VIEW ============ */
