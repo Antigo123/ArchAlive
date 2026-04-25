@@ -846,6 +846,7 @@ export function Editor() {
         return () => document.removeEventListener('keydown', handleKeyDown);
     }, [clipboard, setNodes, setEdges, reactFlowInstance, setViewportVersion]);
 
+
     // Helper to update local node state (e.g. Label change)
     const handleUpdateNode = useCallback((id: string, updates: any) => {
         // 1. Update React State
@@ -1009,7 +1010,9 @@ export function Editor() {
                         isValidConnection={isValidConnection}
                         deleteKeyCode={['Backspace', 'Delete']}
                         /* Touch controls: single-finger pan + drag threshold to avoid accidental drags.
-                           Desktop controls: middle/right-click pan, left-click drag-selects. */
+                           Desktop controls: middle/right-click pan, left-click drag-selects.
+                           Space+drag: hold Space to pan with left-click on desktop. */
+                        panActivationKeyCode="Space"
                         panOnDrag={(isTouchDevice || isMobileEditor) ? true : [1, 2]}
                         selectionOnDrag={!isTouchDevice && !isMobileEditor}
                         nodeDragThreshold={isTouchDevice ? 5 : 1}
