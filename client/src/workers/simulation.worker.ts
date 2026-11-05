@@ -30,6 +30,7 @@ type WorkerMessage =
     | { type: 'syncTopology'; edges: any[]; nodes: any[] }
     | { type: 'updateNode'; nodeId: string; property: string; value: any }
     | { type: 'removeNode'; nodeId: string }
+    | { type: 'resetTraffic' }
     | { type: 'setPaused'; paused: boolean };
 
 // Initialize WASM
@@ -92,6 +93,11 @@ function startTickLoop() {
                     type: 'stats',
                     stats: state.stats,
                     currTick: state.curr_tick || tickCounter
+                });
+                self.postMessage({
+                    type: 'traffic',
+                    outcomes: sim.get_outcomes(),
+                    policyHits: sim.get_policy_hits(),
                 });
             }
         }
@@ -156,6 +162,10 @@ function sendNodeStatus() {
     );
 }
 
+function setPolicy(nodeId: string, policy: { rules?: unknown[]; default_effect?: string; default_status?: number }) {
+    sim?.set_node_policy(nodeId, policy.rules ?? [], policy.default_effect ?? 'deny', policy.default_status ?? 0);
+}
+
 // Sync topology from main thread
 function syncTopology(edges: any[], nodes: any[]) {
     if (!sim) return;
@@ -215,6 +225,9 @@ function syncTopology(edges: any[], nodes: any[]) {
         }
         if (node.data.dependencies && simAny.set_node_dependencies) {
             simAny.set_node_dependencies(node.id, node.data.dependencies);
+        }
+        if (node.type === 'policy') {
+            setPolicy(node.id, node.data);
         }
     });
 
@@ -276,6 +289,9 @@ function updateNode(nodeId: string, property: string, value: any) {
         case 'dependencies':
             if (simAny.set_node_dependencies) simAny.set_node_dependencies(nodeId, value);
             break;
+        case 'policy':
+            setPolicy(nodeId, value);
+            break;
     }
 }
 
@@ -307,6 +323,9 @@ self.onmessage = (event: MessageEvent<WorkerMessage>) => {
             break;
         case 'setPaused':
             isPaused = data.paused;
+            break;
+        case 'resetTraffic':
+            sim?.reset_traffic();
             break;
     }
 };

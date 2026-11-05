@@ -4,6 +4,7 @@ import { Settings, Trash2, Plus, ChevronDown } from 'lucide-react';
 import { ServerLogicEditor } from './ServerLogicEditor';
 import { getMethodColor } from '../utils/colors';
 import { NODE_TYPES_CONFIG } from './node-types';
+import { PolicyEditor, DiagramEditor } from './PolicyEditor';
 
 export type MobileSheetState = 'closed' | 'open';
 
@@ -25,6 +26,7 @@ interface TrafficStream {
     path: string;
     rate?: number;
     retries?: number;
+    principal?: string;
 }
 
 export function NodeInspector({ node, onUpdateNode, onClose, editableFields, mobileSheetState = 'closed', onMobileSheetStateChange }: NodeInspectorProps) {
@@ -306,7 +308,7 @@ export function NodeInspector({ node, onUpdateNode, onClose, editableFields, mob
             ref={inspectorRef}
             data-inspector
             className={`
-                fixed z-[200] bg-white/95 backdrop-blur-md shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden flex flex-col scale-100
+                ${isMobile ? 'fixed' : 'absolute'} z-[200] bg-white/95 backdrop-blur-md shadow-[0_20px_50px_rgba(0,0,0,0.15)] overflow-hidden flex flex-col scale-100
                 transition-[opacity,transform] duration-200
                 ${isMobile
                     ? `inset-x-0 bottom-0 rounded-t-3xl max-[400px]:rounded-t-2xl border-t border-slate-200`
@@ -584,6 +586,9 @@ export function NodeInspector({ node, onUpdateNode, onClose, editableFields, mob
                             </div>
                         )}
 
+                        {node.type === 'policy' && <PolicyEditor node={node} onUpdateNode={onUpdateNode} />}
+                        {node.type === 'diagram' && <DiagramEditor node={node} onUpdateNode={onUpdateNode} />}
+
                         {/* Client Traffic Streams */}
                         {node.type === 'client' && (
                             <div className="space-y-4">
@@ -694,6 +699,17 @@ export function NodeInspector({ node, onUpdateNode, onClose, editableFields, mob
                                                                 className="w-8 bg-transparent text-xs font-bold text-amber-600 focus:outline-none text-right"
                                                                 min="0"
                                                                 max="5"
+                                                                disabled={!canEdit('streams')}
+                                                            />
+                                                        </div>
+                                                        <div className="flex items-center gap-1.5 flex-1 min-w-0 bg-slate-50 border border-slate-200 rounded-md px-2 py-0.5 focus-within:ring-1 focus-within:ring-violet-400 transition-all">
+                                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tight">Who</span>
+                                                            <input
+                                                                value={stream.principal ?? ''}
+                                                                onChange={(e) => editStream(idx, 'principal', e.target.value)}
+                                                                placeholder="anyone"
+                                                                aria-label="Who sends this traffic"
+                                                                className="w-full min-w-0 bg-transparent text-xs font-bold text-violet-700 focus:outline-none"
                                                                 disabled={!canEdit('streams')}
                                                             />
                                                         </div>

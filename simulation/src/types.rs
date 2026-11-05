@@ -32,6 +32,7 @@ pub enum NodeType {
     Cache,
     ApiGateway,
     Topic,
+    Policy,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
@@ -64,6 +65,12 @@ pub fn default_packet_type() -> PacketType {
 }
 pub fn default_index() -> i32 {
     -1
+}
+pub fn default_wildcard() -> String {
+    "*".to_string()
+}
+pub fn default_policy_effect() -> String {
+    "deny".to_string()
 }
 
 #[allow(dead_code)]
@@ -125,6 +132,44 @@ pub struct TrafficStream {
     pub accumulator: f32,
     #[serde(default)]
     pub retries: u32,
+    /// Who is making these requests. Policy nodes match rules against it.
+    #[serde(default)]
+    pub principal: String,
+}
+
+/// One row of a Policy node's ordered rule table. First match wins.
+/// `principal`, `method` and `path` accept "*"; `path` also accepts a "/prefix/*".
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PolicyRule {
+    #[serde(default = "default_wildcard")]
+    pub principal: String,
+    #[serde(default = "default_wildcard")]
+    pub method: String,
+    #[serde(default = "default_wildcard")]
+    pub path: String,
+    /// "allow", "deny", or "limit" (allow up to `rate` requests/sec per principal).
+    pub effect: String,
+    /// Status returned when this rule rejects a request. 0 = 403, or 429 for "limit".
+    #[serde(default)]
+    pub status: u16,
+    #[serde(default)]
+    pub rate: f32,
+}
+
+/// Requests per (principal, status) since the last reset. 200 = reached the client.
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
+pub struct OutcomeStat {
+    pub principal: String,
+    pub status: u16,
+    pub count: u64,
+}
+
+/// How many requests each rule of a Policy node has decided.
+#[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct PolicyHits {
+    pub id: String,
+    pub rule_hits: Vec<u64>,
+    pub default_hits: u64,
 }
 
 #[derive(Serialize, Deserialize, Clone, Default)]
@@ -167,6 +212,20 @@ pub struct NodeData {
     pub route_accumulators: HashMap<String, f32>,
     #[serde(default, skip)]
     pub total_processed: u64,
+    #[serde(default)]
+    pub policy_rules: Vec<PolicyRule>,
+    /// Applies when no rule matches. Anything but "allow" denies.
+    #[serde(default = "default_policy_effect")]
+    pub policy_default_effect: String,
+    #[serde(default)]
+    pub policy_default_status: u16,
+    #[serde(default, skip)]
+    pub policy_rule_hits: Vec<u64>,
+    #[serde(default, skip)]
+    pub policy_default_hits: u64,
+    /// Token buckets for "limit" rules: (rule index, principal) -> (tokens, last refill tick).
+    #[serde(default, skip)]
+    pub policy_buckets: HashMap<(usize, String), (f32, u64)>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -207,6 +266,8 @@ pub struct Packet {
     pub max_retries: u32,
     #[serde(default)]
     pub route_target: String,
+    #[serde(default)]
+    pub principal: String,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════

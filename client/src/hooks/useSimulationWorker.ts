@@ -29,6 +29,10 @@ export interface UseSimulationWorkerResult {
     removeNode: (nodeId: string) => void;
     setPaused: (paused: boolean) => void;
     resetStats: () => void;
+    /** Empties in-flight traffic and zeroes the counts, keeping the system as it is. */
+    resetTraffic: () => void;
+    /** Makes the next topology sync happen even if the edges look unchanged. */
+    forceResync: () => void;
 }
 
 export function useSimulationWorker(): UseSimulationWorkerResult {
@@ -106,6 +110,10 @@ export function useSimulationWorker(): UseSimulationWorkerResult {
 
                         useSimDataStore.getState().updateNodes(updates);
                     }
+                    break;
+
+                case 'traffic':
+                    useSimDataStore.getState().setTraffic(data.outcomes ?? [], data.policyHits ?? []);
                     break;
 
                 case 'nodeIdToIndex':
@@ -200,6 +208,16 @@ export function useSimulationWorker(): UseSimulationWorkerResult {
         });
     }, []);
 
+    const resetTraffic = useCallback(() => {
+        workerRef.current?.postMessage({ type: 'resetTraffic' });
+    }, []);
+
+    // The dedupe signature only covers edges, but two canvases can share edges and differ in
+    // node configuration. A value no real signature can equal forces the next sync through.
+    const forceResync = useCallback(() => {
+        lastTopologyRef.current = '\0forced';
+    }, []);
+
     return {
         isReady,
         stats,
@@ -210,6 +228,8 @@ export function useSimulationWorker(): UseSimulationWorkerResult {
         updateNode,
         removeNode,
         setPaused,
-        resetStats
+        resetStats,
+        resetTraffic,
+        forceResync
     };
 }

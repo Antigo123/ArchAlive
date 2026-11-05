@@ -1,5 +1,5 @@
 
-import { useRef, useCallback, useState, useEffect } from 'react';
+import { useRef, useCallback, useState, useEffect, useMemo } from 'react';
 import { Pause, Play, Plus } from 'lucide-react';
 import {
     ReactFlow,
@@ -27,6 +27,8 @@ import { DatabaseNode } from './nodes/DatabaseNode';
 import { CacheNode } from './nodes/CacheNode';
 import { ApiGatewayNode } from './nodes/ApiGatewayNode';
 import { TopicNode } from './nodes/TopicNode';
+import { PolicyNode } from './nodes/PolicyNode';
+import { DiagramNode } from './nodes/DiagramNode';
 import { NodeInspector, type MobileSheetState } from './NodeInspector';
 import { ContextMenu } from './ContextMenu';
 import { PacketLayerPixi } from './PacketLayerPixi';
@@ -35,12 +37,17 @@ import { useSimulationWorker } from '../hooks/useSimulationWorker';
 import { usePuzzle } from '../hooks/usePuzzle';
 import { PuzzleHUD } from './puzzles/PuzzleHUD';
 import { TutorialOverlay } from './tutorial/TutorialOverlay';
-import { WelcomeModal } from './modals/WelcomeModal';
 import { AboutPopover } from './modals/AboutPopover';
 import { LatencyEdge } from './edges/LatencyEdge';
 import { PUZZLES } from '../puzzles/scenarios';
 import { useMetricsStore } from '../stores/metricsStore';
 import { useSimDataStore } from '../stores/simDataStore';
+import { TutorPanel } from '../tutor/components/TutorPanel';
+import { LessonTabs } from '../tutor/components/LessonTabs';
+import { LessonCard } from '../tutor/components/LessonCard';
+import { attachBridge, saveActiveCanvas, switchTab, type CanvasBridge } from '../tutor/controller';
+import { aliasOf } from '../tutor/scene';
+import { DESIGN_TAB_ID, useTutorStore } from '../tutor/store';
 
 
 const nodeTypes = {
@@ -52,6 +59,8 @@ const nodeTypes = {
     cache: CacheNode,
     api_gateway: ApiGatewayNode,
     topic: TopicNode,
+    policy: PolicyNode,
+    diagram: DiagramNode,
 };
 
 const edgeTypes = {
@@ -61,7 +70,7 @@ const edgeTypes = {
 const STORAGE_KEY = 'archalive_editor_state';
 
 // Load persisted state from localStorage
-const loadPersistedState = (): { nodes: Node[]; edges: Edge[]; nextId: number; viewport?: { x: number; y: number; zoom: number }; isFirstVisit?: boolean } => {
+const loadPersistedState = (): { nodes: Node[]; edges: Edge[]; nextId: number; viewport?: { x: number; y: number; zoom: number } } => {
     if (typeof window === 'undefined') {
         return getDefaultDemoState();
     }
@@ -81,8 +90,8 @@ const loadPersistedState = (): { nodes: Node[]; edges: Edge[]; nextId: number; v
     } catch (e) {
         console.error('[Persistence] Failed to load state:', e);
     }
-    // Show e-commerce template for first-time users
-    return getEcommerceTemplateState();
+    // First-time users start with an empty canvas and the tutor.
+    return getDefaultDemoState();
 };
 
 // Default demo state (fallback)
@@ -92,26 +101,6 @@ const getDefaultDemoState = () => ({
     nextId: 0,
     viewport: { x: 0, y: 0, zoom: 0.8 },
 });
-
-// E-commerce template for first-time users
-const getEcommerceTemplateState = () => {
-    const ecommerce = PUZZLES.find(p => p.id === 'template-ecommerce');
-    if (!ecommerce) return getDefaultDemoState();
-
-    let maxId = 0;
-    ecommerce.initialState.nodes.forEach(n => {
-        const match = n.id.match(/_([0-9]+)/);
-        if (match) maxId = Math.max(maxId, parseInt(match[1], 10));
-    });
-
-    return {
-        nodes: ecommerce.initialState.nodes as Node[],
-        edges: ecommerce.initialState.edges as Edge[],
-        nextId: maxId + 1,
-        viewport: ecommerce.initialState.viewport,
-        isFirstVisit: true,
-    };
-};
 
 // Load state at module initialization time
 const initialState = loadPersistedState();
@@ -127,6 +116,18 @@ function applyApiGatewayDefaults(node: Node): void {
     node.data.label = 'API Gateway';
 }
 
+function applyTutorNodeDefaults(node: Node): void {
+    if (node.type === 'policy') {
+        node.data.label = 'Policy';
+        node.data.rules = [{ principal: '*', method: '*', path: '*', effect: 'allow', status: 0, rate: 0 }];
+        node.data.default_effect = 'deny';
+        node.data.default_status = 0;
+    } else if (node.type === 'diagram') {
+        node.data.label = '';
+        node.data.block = { kind: 'text', text: 'Click to edit this note.' };
+    }
+}
+
 export function Editor() {
     const reactFlowWrapper = useRef<HTMLDivElement>(null);
 
@@ -134,7 +135,6 @@ export function Editor() {
     const [nodes, setNodes, onNodesChange] = useNodesState<Node>(initialState.nodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState<Edge>(initialState.edges);
     const [reactFlowInstance, setReactFlowInstance] = useState<any>(null);
-    const [needsFitView, setNeedsFitView] = useState(initialState.isFirstVisit === true);
 
     // Web Worker for simulation (replaces direct WASM)
     const {
@@ -148,6 +148,8 @@ export function Editor() {
         removeNode: removeWorkerNode,
         setPaused: setWorkerPaused,
         resetStats,
+        resetTraffic,
+        forceResync,
     } = useSimulationWorker();
 
     // Dimensions for Packet Layer
@@ -214,12 +216,6 @@ export function Editor() {
         } catch { return []; }
     });
 
-    // First-time user detection for welcome modal
-    const [showWelcome, setShowWelcome] = useState(() => {
-        if (typeof window === 'undefined') return false;
-        return !localStorage.getItem('archalive_tutorial_seen');
-    });
-
     // Puzzle Complete Handler (memoized to prevent infinite loops)
     const handlePuzzleComplete = useCallback((id: string) => {
         setCompletedPuzzles(prev => {
@@ -242,7 +238,10 @@ export function Editor() {
 
     const handleStartLevel = useCallback((id: string) => {
         const puzzle = PUZZLES.find(p => p.id === id);
-        if (puzzle) {
+        if (puzzle && !useTutorStore.getState().running) {
+            // Tutorials and templates load onto the learner's own canvas, not a lesson's.
+            switchTab(DESIGN_TAB_ID);
+
             // 1. Load Scenario
             // Need to reset ID counter to avoid collisions with old state? 
             // Better to find max ID in new state.
@@ -299,6 +298,10 @@ export function Editor() {
         if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
 
         saveTimerRef.current = setTimeout(() => {
+            saveActiveCanvas();
+            // Lesson tabs persist through the tutor's store. This key is only for "My design".
+            if (useTutorStore.getState().activeTabId !== DESIGN_TAB_ID) return;
+
             const persistNodes = nodes.map(node => ({
                 id: node.id,
                 type: node.type,
@@ -312,6 +315,11 @@ export function Editor() {
                     streams: node.data.streams,
                     dependencies: node.data.dependencies,
                     cache_hit_rate: node.data.cache_hit_rate,
+                    rules: node.data.rules,
+                    default_effect: node.data.default_effect,
+                    default_status: node.data.default_status,
+                    block: node.data.block,
+                    alias: node.data.alias,
                 },
             }));
 
@@ -544,6 +552,7 @@ export function Editor() {
                 newNode.data.label = "Topic";
                 newNode.data.buffer_capacity = 100;
             }
+            applyTutorNodeDefaults(newNode);
 
             setNodes((nds) => nds.concat(newNode));
         },
@@ -574,7 +583,8 @@ export function Editor() {
             sourceNode?.type === 'load_balancer' ||
             sourceNode?.type === 'topic' ||
             sourceNode?.type === 'api_gateway' ||
-            sourceNode?.type === 'message_queue';
+            sourceNode?.type === 'message_queue' ||
+            sourceNode?.type === 'policy';
 
         if (!isFanOutNode) {
             const isDefaultHandle = (h: string | null | undefined) => !h || h === '' || h === 'left' || h === 'right';
@@ -631,6 +641,7 @@ export function Editor() {
         if (type === 'api_gateway') {
             applyApiGatewayDefaults(newNode);
         }
+        applyTutorNodeDefaults(newNode);
 
         setNodes((nds) => nds.concat(newNode));
     }, [setNodes]);
@@ -886,6 +897,13 @@ export function Editor() {
         if (updates.request_rate !== undefined) {
             updateWorkerNode(id, 'request_rate', updates.request_rate);
         }
+        if (updates.rules !== undefined) {
+            updateWorkerNode(id, 'policy', {
+                rules: updates.rules,
+                default_effect: updates.default_effect,
+                default_status: updates.default_status,
+            });
+        }
     }, [setNodes, updateWorkerNode]);
 
     // Load a saved design
@@ -908,21 +926,107 @@ export function Editor() {
 
     const selectedNode = nodes.find(n => n.id === selectedNodeId) || null;
 
+    // ── Tutor ──────────────────────────────────────────────────────────────
+    // The tutor drives the canvas through this bridge. Refs keep it stable and let a step read
+    // back a canvas it just set, before React has rendered it.
+    const canvasRef = useRef({ nodes, edges });
+    canvasRef.current = { nodes, edges };
+    const instanceRef = useRef(reactFlowInstance);
+    instanceRef.current = reactFlowInstance;
+    const stopPuzzleRef = useRef(stopPuzzle);
+    stopPuzzleRef.current = stopPuzzle;
+
+    const fitAround = (bottomSpace: number) => {
+        // "My design" also has the full components sidebar to leave room for.
+        const onDesign = useTutorStore.getState().activeTabId === DESIGN_TAB_ID;
+        instanceRef.current?.fitView({
+            padding: { top: '70px', right: '40px', bottom: `${bottomSpace}px`, left: onDesign ? '250px' : '80px' },
+            maxZoom: 1,
+            duration: 300,
+        });
+    };
+
+    const bridge = useRef<CanvasBridge>({
+        getCanvas: () => ({ ...canvasRef.current, viewport: instanceRef.current?.getViewport() }),
+        setCanvas: (canvas, options) => {
+            canvasRef.current = { nodes: canvas.nodes, edges: canvas.edges };
+            idCounter = Math.max(idCounter, ...canvas.nodes.map(n => {
+                const match = n.id.match(/_([0-9]+)$/);
+                return match ? parseInt(match[1], 10) + 1 : 0;
+            }));
+            forceResyncRef.current();
+            useMetricsStore.getState().reset();
+            useSimDataStore.getState().clear();
+            resetStatsRef.current();
+            setSelectedNodeId(null);
+            setNodes(canvas.nodes);
+            setEdges(canvas.edges);
+            const instance = instanceRef.current;
+            if (!instance) return;
+            if (options?.fit || !canvas.viewport) {
+                setTimeout(() => fitAround(70), 60);
+            } else {
+                instance.setViewport(canvas.viewport);
+            }
+        },
+        setPaused: (paused) => {
+            isPausedRef.current = paused;
+            setIsPaused(paused);
+        },
+        isPaused: () => isPausedRef.current,
+        refit: (cardSpace) => fitAround(cardSpace),
+        resetTraffic: () => {
+            useSimDataStore.getState().clear();
+            resetTrafficRef.current();
+        },
+        allocId: (type) => getId(type),
+        stopPuzzle: () => stopPuzzleRef.current(),
+    }).current;
+
+    const forceResyncRef = useRef(forceResync);
+    forceResyncRef.current = forceResync;
+    const resetStatsRef = useRef(resetStats);
+    resetStatsRef.current = resetStats;
+    const resetTrafficRef = useRef(resetTraffic);
+    resetTrafficRef.current = resetTraffic;
+
+    useEffect(() => {
+        if (reactFlowInstance) attachBridge(bridge);
+    }, [reactFlowInstance, bridge]);
+
+    // Spotlight: dim everything not in focus. Applied only to what's rendered, never saved.
+    const focus = useTutorStore(s => s.focus);
+    const activeTabId = useTutorStore(s => s.activeTabId);
+    const displayNodes = useMemo(() => {
+        if (focus.length === 0) return nodes;
+        const focused = new Set(focus.map(f => f.split(':')[0]));
+        return nodes.map(n => ({ ...n, className: focused.has(aliasOf(n)) ? 'tutor-focus' : 'tutor-dim' }));
+    }, [nodes, focus]);
+    const displayEdges = useMemo(() => {
+        if (focus.length === 0) return edges;
+        const focused = new Set(focus.map(f => f.split(':')[0]));
+        const isFocused = new Set(nodes.filter(n => focused.has(aliasOf(n))).map(n => n.id));
+        return edges.map(e => (isFocused.has(e.source) || isFocused.has(e.target) ? e : { ...e, className: 'tutor-dim' }));
+    }, [edges, nodes, focus]);
+
 
 
 
 
 
     return (
-        <main className="flex h-screen w-screen bg-transparent">
-            <h1 className="sr-only">ArchAlive Architecture Simulator</h1>
+        <main className="flex flex-col h-screen w-screen bg-transparent">
+            <h1 className="sr-only">ArchAlive: learn backend concepts by watching them run</h1>
+            <LessonTabs />
             <ReactFlowProvider>
+                <div className="flex flex-1 min-h-0 relative">
                 <Sidebar
                     onClear={() => {
                         setNodes([]);
                         setEdges([]);
                     }}
                     allowedNodes={puzzleState.currentPuzzle?.permissions?.allowedNodes}
+                    autoCollapsed={activeTabId !== DESIGN_TAB_ID}
                 />
                 <div className="flex-1 h-full relative" ref={reactFlowWrapper} {...(isTouchDevice ? { 'data-touch': '' } : {})}>
 
@@ -943,20 +1047,6 @@ export function Editor() {
                         isActive={puzzleState.status === 'running' && puzzleState.currentTutorialStep < (puzzleState.currentPuzzle?.tutorialSteps?.length || 0)}
                     />
 
-                    {/* Welcome Modal for First-Time Users */}
-                    <WelcomeModal
-                        isOpen={showWelcome}
-                        onStartTutorial={() => {
-                            localStorage.setItem('archalive_tutorial_seen', 'true');
-                            setShowWelcome(false);
-                            handleStartLevel('tutorial-01');
-                        }}
-                        onSkip={() => {
-                            localStorage.setItem('archalive_tutorial_seen', 'true');
-                            setShowWelcome(false);
-                        }}
-                    />
-
                     {/* Node Inspector */}
                     <NodeInspector
                         node={selectedNode}
@@ -970,28 +1060,13 @@ export function Editor() {
 
                     <ReactFlow
                         data-main-canvas
-                        nodes={nodes}
-                        edges={edges}
+                        nodes={displayNodes}
+                        edges={displayEdges}
                         onNodesChange={onNodesChange}
                         onEdgesChange={onEdgesChange}
                         onConnect={onConnect}
                         onNodesDelete={onNodesDelete}
-                        onInit={(instance) => {
-                            setReactFlowInstance(instance);
-                            // Fit the e-commerce template to screen on first visit
-                            if (needsFitView) {
-                                setTimeout(() => {
-                                    if (isMobileEditor) {
-                                        // fitView zooms out too far on small screens — instead
-                                        // show the clients + gateway portion at a readable zoom.
-                                        instance.setViewport({ x: 20, y: 60, zoom: 0.55 });
-                                    } else {
-                                        instance.fitView({ padding: 0.1 });
-                                    }
-                                    setNeedsFitView(false);
-                                }, 100);
-                            }
-                        }}
+                        onInit={setReactFlowInstance}
                         defaultViewport={initialState.viewport || { x: 0, y: 0, zoom: 0.8 }}
                         onDrop={onDrop}
                         onDragOver={onDragOver}
@@ -1043,6 +1118,8 @@ export function Editor() {
                             }}
                         />
                     )}
+
+                    <LessonCard dodgeInspector={selectedNode !== null && !isMobileEditor} />
 
                     {/* Dashboard Overlay */}
                     <Dashboard stats={stats} />
@@ -1139,6 +1216,8 @@ export function Editor() {
 
 
 
+                </div>
+                <TutorPanel />
                 </div>
             </ReactFlowProvider>
         </main>

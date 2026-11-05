@@ -263,4 +263,42 @@ body {
 
 .animate-pulse-slow {
   animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
-}
+}
+
+/* Tutor: spotlight on the canvas */
+.react-flow__node.tutor-dim {
+  opacity: 0.35;
+  transition: opacity 250ms;
+}
+.react-flow__edge.tutor-dim {
+  opacity: 0.25;
+  transition: opacity 250ms;
+}
+.react-flow__node.tutor-focus {
+  transition: opacity 250ms;
+}
+.react-flow__node.tutor-focus .node-card-enhanced {
+  outline: 3px solid rgba(99, 102, 241, 0.55);
+  outline-offset: 2px;
+}
+
+/* Tutor: model-written markdown */
+.tutor-md > :first-child { margin-top: 0; }
+.tutor-md > :last-child { margin-bottom: 0; }
+.tutor-md p { margin: 0.4em 0; }
+.tutor-md ul, .tutor-md ol { margin: 0.4em 0; padding-left: 1.25em; }
+.tutor-md ul { list-style: disc; }
+.tutor-md ol { list-style: decimal; }
+.tutor-md li { margin: 0.15em 0; }
+.tutor-md h1, .tutor-md h2, .tutor-md h3, .tutor-md h4 { font-weight: 700; margin: 0.6em 0 0.25em; font-size: 1em; }
+.tutor-md code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 0.9em; background: rgb(241 245 249); border-radius: 4px; padding: 0.05em 0.3em; }
+.tutor-md pre { background: rgb(241 245 249); border-radius: 8px; padding: 0.6em 0.75em; overflow-x: auto; margin: 0.5em 0; }
+.tutor-md pre code { background: none; padding: 0; }
+.tutor-md a { color: rgb(67 56 202); text-decoration: underline; }
+.tutor-md table { border-collapse: collapse; margin: 0.5em 0; font-size: 0.9em; display: block; overflow-x: auto; }
+.tutor-md th, .tutor-md td { border: 1px solid rgb(226 232 240); padding: 0.2em 0.5em; text-align: left; }
+.tutor-md th { background: rgb(248 250 252); font-weight: 600; }
+
+@media (prefers-reduced-motion: reduce) {
+  .react-flow__node.tutor-dim, .react-flow__edge.tutor-dim, .react-flow__node.tutor-focus { transition: none; }
+}

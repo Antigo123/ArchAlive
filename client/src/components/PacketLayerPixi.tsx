@@ -375,7 +375,7 @@ const PixiApp = (props: PacketLayerProps & PixiAppInternalProps) => {
                 nodeCache.current[off + 3] = n.measured?.height || 0;
                 // Type mapping
                 let t = 0;
-                if (n.type === 'client') t = 1; else if (n.type === 'server') t = 2; else if (n.type === 'database') t = 3; else if (n.type === 'load_balancer') t = 4; else if (n.type === 'cache') t = 5; else if (n.type === 'message_queue') t = 6; else if (n.type === 'topic') t = 7; else if (n.type === 'api_gateway') t = 8;
+                if (n.type === 'client') t = 1; else if (n.type === 'server') t = 2; else if (n.type === 'database') t = 3; else if (n.type === 'load_balancer') t = 4; else if (n.type === 'cache') t = 5; else if (n.type === 'message_queue') t = 6; else if (n.type === 'topic') t = 7; else if (n.type === 'api_gateway') t = 8; else if (n.type === 'policy') t = 9;
                 nodeCache.current[off + 4] = t;
             }
         });
@@ -480,7 +480,7 @@ const PixiApp = (props: PacketLayerProps & PixiAppInternalProps) => {
             const sHeader = (sn_type === 1) ? 90 : (sn_type === 4) ? 20 : (sn_type === 8) ? 85 : 147;
             // API Gateway row pitch is h-8 (32px) + space-y-1.5 (6px) = 38px
             const sRowPitch = (sn_type === 8) ? 38 : ROW_HEIGHT;
-            const sHasList = (sn_h > 80 || sn_type === 1 || sn_type === 8) && sn_type !== 3 && sn_type !== 4 && sn_type !== 5 && sn_type !== 6 && sn_type !== 7;
+            const sHasList = (sn_h > 80 || sn_type === 1 || sn_type === 8) && sn_type !== 3 && sn_type !== 4 && sn_type !== 5 && sn_type !== 6 && sn_type !== 7 && sn_type !== 9;
             const sHasReplyRow = (sn_type === 2);
 
             if (s_val > 0) {
@@ -507,7 +507,7 @@ const PixiApp = (props: PacketLayerProps & PixiAppInternalProps) => {
             // Heuristics for Header Height based on Type
             const tHeader = (tn_type === 1) ? 90 : (tn_type === 4) ? 20 : (tn_type === 8) ? 85 : 147;
             const tRowPitch = (tn_type === 8) ? 38 : ROW_HEIGHT;
-            const tHasList = (tn_h > 80 || tn_type === 1 || tn_type === 8) && tn_type !== 3 && tn_type !== 4 && tn_type !== 5 && tn_type !== 6 && tn_type !== 7;
+            const tHasList = (tn_h > 80 || tn_type === 1 || tn_type === 8) && tn_type !== 3 && tn_type !== 4 && tn_type !== 5 && tn_type !== 6 && tn_type !== 7 && tn_type !== 9;
             const tHasReplyRow = (tn_type === 2);
 
             // Removed outdated 40% vertical heuristic. Handles are now exactly at 50% height.

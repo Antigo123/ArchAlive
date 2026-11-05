@@ -1,10 +1,16 @@
-import { memo } from 'react';
-import { Handle, Position, type NodeProps } from '@xyflow/react';
+import { memo, useEffect } from 'react';
+import { Handle, Position, useUpdateNodeInternals, type NodeProps } from '@xyflow/react';
 import { Smartphone } from 'lucide-react';
 import { getMethodColor } from '../../utils/colors';
 
-export const ClientNode = memo(function ClientNode({ data, selected }: NodeProps) {
+export const ClientNode = memo(function ClientNode({ id, data, selected }: NodeProps) {
     const streams = (data.streams as any[]) || [];
+    const updateNodeInternals = useUpdateNodeInternals();
+
+    // A lesson can change a client's streams, and React Flow must re-measure their handles.
+    useEffect(() => {
+        updateNodeInternals(id);
+    }, [id, data.streams, updateNodeInternals]);
 
     return (
         <div className={`

@@ -49,6 +49,11 @@ const serializeNodes = (nodesToSerialize: Node[]) =>
             dependencies: node.data.dependencies,
             cache_hit_rate: node.data.cache_hit_rate,
             replicas: node.data.replicas,
+            rules: node.data.rules,
+            default_effect: node.data.default_effect,
+            default_status: node.data.default_status,
+            block: node.data.block,
+            alias: node.data.alias,
         },
     }));
 

@@ -1,4 +1,5 @@
 use crate::types::*;
+use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::collections::VecDeque;
 use wasm_bindgen::prelude::*;
@@ -21,6 +22,72 @@ pub struct SimulationInner {
     pub id_to_index: HashMap<String, usize>,
     pub packet_buffer: Vec<f32>,
     pub node_status_buffer: Vec<f32>,
+    pub outcomes: BTreeMap<(String, u16), u64>,
+}
+
+/// A rule's principal/method field: "*" matches anything.
+fn field_matches(pattern: &str, value: &str) -> bool {
+    pattern == "*" || pattern.eq_ignore_ascii_case(value)
+}
+
+/// A rule's path: "*" matches anything, "/docs/*" matches "/docs" and anything under it.
+fn path_matches(pattern: &str, path: &str) -> bool {
+    if pattern == "*" || pattern == path {
+        return true;
+    }
+    match pattern.strip_suffix("/*") {
+        Some(prefix) => {
+            path == prefix || (path.starts_with(prefix) && path[prefix.len()..].starts_with('/'))
+        }
+        None => false,
+    }
+}
+
+/// Decides one request at a Policy node: `Ok(())` to forward, `Err(status)` to reject.
+fn evaluate_policy(node: &mut NodeData, packet: &Packet, tick_current: u64) -> Result<(), u16> {
+    if node.policy_rule_hits.len() != node.policy_rules.len() {
+        node.policy_rule_hits = vec![0; node.policy_rules.len()];
+    }
+
+    let matched = node.policy_rules.iter().position(|r| {
+        field_matches(&r.principal, &packet.principal)
+            && field_matches(&r.method, &packet.method)
+            && path_matches(&r.path, &packet.path)
+    });
+
+    let Some(idx) = matched else {
+        node.policy_default_hits += 1;
+        return if node.policy_default_effect == "allow" {
+            Ok(())
+        } else {
+            Err(if node.policy_default_status == 0 { 403 } else { node.policy_default_status })
+        };
+    };
+
+    node.policy_rule_hits[idx] += 1;
+    let rule = &node.policy_rules[idx];
+    match rule.effect.as_str() {
+        "allow" => Ok(()),
+        "limit" => {
+            let rate = rule.rate.max(0.0);
+            let status = if rule.status == 0 { 429 } else { rule.status };
+            // Token bucket holding up to one second's worth of requests.
+            let burst = rate.max(1.0);
+            let bucket = node
+                .policy_buckets
+                .entry((idx, packet.principal.clone()))
+                .or_insert((burst, tick_current));
+            bucket.0 = (bucket.0 + (tick_current - bucket.1) as f32 * rate / 60.0).min(burst);
+            bucket.1 = tick_current;
+            if bucket.0 >= 1.0 {
+                bucket.0 -= 1.0;
+                Ok(())
+            } else {
+                Err(status)
+            }
+        }
+        _ => Err(if rule.status == 0 { 403 } else { rule.status }),
+    }
 }
 
 /// Convert an edge's latency_ms to packet speed (progress units per tick).
@@ -48,7 +115,31 @@ impl SimulationInner {
             id_to_index: HashMap::new(),
             packet_buffer: Vec::new(),
             node_status_buffer: Vec::new(),
+            outcomes: BTreeMap::new(),
         }
+    }
+
+    pub fn outcome_stats(&self) -> Vec<OutcomeStat> {
+        self.outcomes
+            .iter()
+            .map(|((principal, status), count)| OutcomeStat {
+                principal: principal.clone(),
+                status: *status,
+                count: *count,
+            })
+            .collect()
+    }
+
+    pub fn policy_hits(&self) -> Vec<PolicyHits> {
+        self.nodes
+            .iter()
+            .filter(|n| matches!(n.node_type, NodeType::Policy))
+            .map(|n| PolicyHits {
+                id: n.id.clone(),
+                rule_hits: n.policy_rule_hits.clone(),
+                default_hits: n.policy_default_hits,
+            })
+            .collect()
     }
 
     // ═══════════════════════════════════════════════════════════════════════════
@@ -772,6 +863,7 @@ impl SimulationInner {
         let edges = &self.edges;
         let latency_window = &mut self.latency_window;
         let next_packet_id = &mut self.next_packet_id;
+        let outcomes = &mut self.outcomes;
 
         self.packets.retain_mut(|packet| {
             if packet.dropped {
@@ -779,6 +871,10 @@ impl SimulationInner {
                     packet.ttl -= 1;
                     return true;
                 }
+                // Every failure passes through here exactly once, whichever phase dropped it.
+                *outcomes
+                    .entry((packet.principal.clone(), packet.error_code))
+                    .or_insert(0) += 1;
                 return false;
             }
 
@@ -813,7 +909,7 @@ impl SimulationInner {
             let is_reply = matches!(packet.p_type, PacketType::Reply);
 
             // Buffer overflow check (requests only — load balancers are pass-through, no capacity limit)
-            let is_pass_through = matches!(node.node_type, NodeType::LoadBalancer);
+            let is_pass_through = matches!(node.node_type, NodeType::LoadBalancer | NodeType::Policy);
             if !is_reply && !is_pass_through && (node.current_load + 1) as f32 > node.buffer_capacity {
                 if packet.retry_count < packet.max_retries {
                     let mut retry_pkt = packet.clone();
@@ -853,6 +949,7 @@ impl SimulationInner {
             if is_reply {
                 if matches!(node.node_type, NodeType::Client) {
                     stats.total_processed += 1;
+                    *outcomes.entry((packet.principal.clone(), 200)).or_insert(0) += 1;
                     let latency = tick_current - packet.start_tick;
                     if latency_window.len() >= 300 {
                         latency_window.pop_front();
@@ -969,6 +1066,22 @@ impl SimulationInner {
                 node.total_processed += 1;
                 node.work_queue.push_back((tick_current, packet.clone()));
                 return false;
+            } else if matches!(node.node_type, NodeType::Policy) {
+                node.total_processed += 1;
+                return match evaluate_policy(node, packet, tick_current) {
+                    Ok(()) => {
+                        node.work_queue.push_back((tick_current, packet.clone()));
+                        false
+                    }
+                    Err(status) => {
+                        packet.dropped = true;
+                        packet.speed = 0.0;
+                        packet.ttl = 20;
+                        packet.error_code = status;
+                        stats.total_dropped += 1;
+                        true
+                    }
+                };
             } else if matches!(node.node_type, NodeType::ApiGateway) {
                 let mut gw_match = false;
 
@@ -1117,6 +1230,7 @@ impl SimulationInner {
                     retry_count: 0,
                     max_retries: stream.retries,
                     route_target: String::new(),
+                    principal: stream.principal.clone(),
                 };
 
                 let mut valid_edges: Vec<&EdgeConn> = self.edges[node_idx]

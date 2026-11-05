@@ -16,8 +16,25 @@ export interface SimNodeData {
     total_processed: number;
 }
 
+export interface OutcomeStat {
+    principal: string;
+    status: number;
+    count: number;
+}
+
+export interface PolicyHits {
+    rule_hits: number[];
+    default_hits: number;
+}
+
 interface SimDataState {
     nodes: Record<string, SimNodeData>;
+    /** Requests per (principal, status) since the last reset. 200 reached the client. */
+    outcomes: OutcomeStat[];
+    /** Policy node id -> how many requests each rule has decided. */
+    policyHits: Record<string, PolicyHits>;
+
+    setTraffic: (outcomes: OutcomeStat[], policyHits: (PolicyHits & { id: string })[]) => void;
 
     // Batch update all nodes at once (called from simulation loop)
     updateNodes: (updates: Record<string, Partial<SimNodeData>>) => void;
@@ -31,6 +48,13 @@ interface SimDataState {
 
 export const useSimDataStore = create<SimDataState>((set) => ({
     nodes: {},
+    outcomes: [],
+    policyHits: {},
+
+    setTraffic: (outcomes, policyHits) => set({
+        outcomes,
+        policyHits: Object.fromEntries(policyHits.map(({ id, ...hits }) => [id, hits])),
+    }),
 
     updateNodes: (updates) => set((state) => {
         const newNodes = { ...state.nodes };
@@ -85,7 +109,7 @@ export const useSimDataStore = create<SimDataState>((set) => ({
         },
     })),
 
-    clear: () => set({ nodes: {} }),
+    clear: () => set({ nodes: {}, outcomes: [], policyHits: {} }),
 }));
 
 // Selector hook for individual node - use with shallow comparison

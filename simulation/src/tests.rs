@@ -34,6 +34,7 @@ mod core_tests {
             rate,
             accumulator: 0.0,
             retries: 0,
+            principal: String::new(),
         }
     }
 
@@ -48,6 +49,7 @@ mod core_tests {
             rate,
             accumulator: 0.0,
             retries: 0,
+            principal: String::new(),
         }
     }
 
@@ -506,6 +508,7 @@ mod core_tests {
                 rate: 10.0,
                 accumulator: 0.0,
                 retries: 0,
+                principal: String::new(),
             }],
         ));
         sim.pending_ops.borrow_mut().push(SimOp::SetNodeEndpoints(
@@ -608,7 +611,8 @@ mod core_tests {
                 path: "/".into(),
                 rate: 30.0,
                 accumulator: 0.0,
-                retries: 3, // enable retries
+                retries: 3, // enable retries,
+                principal: String::new(),
             }],
         ));
         tick_n(&sim, 500);
@@ -863,6 +867,7 @@ mod core_tests {
                 rate: 5.0,
                 accumulator: 0.0,
                 retries: 0,
+                principal: String::new(),
             }],
         ));
         sim.pending_ops.borrow_mut().push(SimOp::SetNodeStreams(
@@ -877,6 +882,7 @@ mod core_tests {
                 rate: 5.0,
                 accumulator: 0.0,
                 retries: 0,
+                principal: String::new(),
             }],
         ));
         sim.tick();
@@ -940,6 +946,7 @@ mod core_tests {
                 rate: 10.0,
                 accumulator: 0.0,
                 retries: 0,
+                principal: String::new(),
             }],
         ));
         sim.tick();
@@ -979,6 +986,7 @@ mod benchmarks {
             rate,
             accumulator: 0.0,
             retries: 0,
+            principal: String::new(),
         }
     }
 
@@ -1214,5 +1222,259 @@ mod benchmarks {
             10_000,
         );
         assert!(tps > 350, "Stress test should exceed 350 tps, got {}", tps);
+    }
+}
+
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// Policy node: ordered allow/deny/limit rules evaluated per request
+// ═══════════════════════════════════════════════════════════════════════════════
+
+#[cfg(test)]
+mod policy_tests {
+    use crate::ops::SimOp;
+    use crate::types::*;
+    use crate::wasm_api::Simulation;
+
+    fn rule(principal: &str, method: &str, path: &str, effect: &str) -> PolicyRule {
+        PolicyRule {
+            principal: principal.into(),
+            method: method.into(),
+            path: path.into(),
+            effect: effect.into(),
+            status: 0,
+            rate: 0.0,
+        }
+    }
+
+    fn stream(id: &str, principal: &str, method: &str, path: &str, rate: f32) -> TrafficStream {
+        TrafficStream {
+            id: id.into(),
+            label: id.into(),
+            is_write: method != "GET",
+            weight: 1,
+            method: method.into(),
+            path: path.into(),
+            rate,
+            accumulator: 0.0,
+            retries: 0,
+            principal: principal.into(),
+        }
+    }
+
+    /// Clients -> policy -> database, with the given streams on one client per entry.
+    fn setup(clients: Vec<(&str, Vec<TrafficStream>)>, rules: Vec<PolicyRule>, default: &str) -> Simulation {
+        let sim = Simulation::new();
+        for (client, streams) in &clients {
+            for s in streams {
+                sim.add_edge((*client).into(), "policy_1".into(), s.id.clone(), "left".into(), 0.0);
+            }
+        }
+        sim.add_edge("policy_1".into(), "database_1".into(), "right".into(), "left".into(), 0.0);
+        sim.tick();
+        {
+            let mut ops = sim.pending_ops.borrow_mut();
+            ops.push(SimOp::SetNodeDelay("database_1".into(), 1.0));
+            ops.push(SimOp::SetNodeCapacity("database_1".into(), 1000.0));
+            ops.push(SimOp::SetNodePolicy("policy_1".into(), rules, default.into(), 0));
+            for (client, streams) in clients {
+                ops.push(SimOp::SetNodeStreams(client.into(), streams));
+            }
+        }
+        sim
+    }
+
+    fn run(sim: &Simulation, ticks: u32) {
+        for _ in 0..ticks {
+            sim.tick();
+        }
+    }
+
+    fn count(sim: &Simulation, principal: &str, status: u16) -> u64 {
+        sim.inner
+            .borrow()
+            .outcome_stats()
+            .iter()
+            .find(|o| o.principal == principal && o.status == status)
+            .map(|o| o.count)
+            .unwrap_or(0)
+    }
+
+    #[test]
+    fn policy_node_type_is_inferred_from_id() {
+        let sim = setup(vec![], vec![], "deny");
+        let inner = sim.inner.borrow();
+        let idx = inner.id_to_index["policy_1"];
+        assert!(matches!(inner.nodes[idx].node_type, NodeType::Policy));
+    }
+
+    #[test]
+    fn allowed_principal_succeeds_and_other_is_denied_with_403() {
+        let sim = setup(
+            vec![
+                ("client_alice", vec![stream("a", "alice", "GET", "/docs", 5.0)]),
+                ("client_bob", vec![stream("b", "bob", "GET", "/docs", 5.0)]),
+            ],
+            vec![rule("alice", "*", "/docs", "allow")],
+            "deny",
+        );
+        run(&sim, 900);
+
+        assert!(count(&sim, "alice", 200) > 20, "alice should get replies");
+        assert_eq!(count(&sim, "alice", 403), 0);
+        assert!(count(&sim, "bob", 403) > 20, "bob should be denied");
+        assert_eq!(count(&sim, "bob", 200), 0);
+    }
+
+    #[test]
+    fn first_matching_rule_wins() {
+        let deny_first = setup(
+            vec![("client_bob", vec![stream("b", "bob", "GET", "/docs", 5.0)])],
+            vec![rule("bob", "*", "*", "deny"), rule("*", "GET", "/docs", "allow")],
+            "deny",
+        );
+        run(&deny_first, 900);
+        assert!(count(&deny_first, "bob", 403) > 20);
+        assert_eq!(count(&deny_first, "bob", 200), 0);
+
+        let allow_first = setup(
+            vec![("client_bob", vec![stream("b", "bob", "GET", "/docs", 5.0)])],
+            vec![rule("*", "GET", "/docs", "allow"), rule("bob", "*", "*", "deny")],
+            "deny",
+        );
+        run(&allow_first, 900);
+        assert!(count(&allow_first, "bob", 200) > 20);
+        assert_eq!(count(&allow_first, "bob", 403), 0);
+    }
+
+    #[test]
+    fn default_effect_applies_when_nothing_matches() {
+        let open = setup(
+            vec![("client_bob", vec![stream("b", "bob", "GET", "/docs", 5.0)])],
+            vec![],
+            "allow",
+        );
+        run(&open, 900);
+        assert!(count(&open, "bob", 200) > 20);
+
+        let closed = setup(
+            vec![("client_bob", vec![stream("b", "bob", "GET", "/docs", 5.0)])],
+            vec![],
+            "deny",
+        );
+        run(&closed, 900);
+        assert!(count(&closed, "bob", 403) > 20);
+        assert_eq!(count(&closed, "bob", 200), 0);
+    }
+
+    #[test]
+    fn method_and_path_patterns_match_as_documented() {
+        let sim = setup(
+            vec![(
+                "client_a",
+                vec![
+                    stream("read", "a", "GET", "/docs/1", 5.0),
+                    stream("write", "b", "POST", "/docs/1", 5.0),
+                    stream("sibling", "c", "GET", "/docsify", 5.0),
+                ],
+            )],
+            vec![rule("*", "GET", "/docs/*", "allow")],
+            "deny",
+        );
+        run(&sim, 900);
+
+        assert!(count(&sim, "a", 200) > 10, "prefix should match a child path");
+        assert!(count(&sim, "b", 403) > 10, "method must match too");
+        assert!(count(&sim, "c", 403) > 10, "prefix must not match /docsify");
+    }
+
+    #[test]
+    fn custom_status_is_reported() {
+        let mut needs_login = rule("anonymous", "*", "*", "deny");
+        needs_login.status = 401;
+        let sim = setup(
+            vec![("client_anon", vec![stream("x", "anonymous", "GET", "/", 5.0)])],
+            vec![needs_login],
+            "allow",
+        );
+        run(&sim, 600);
+        assert!(count(&sim, "anonymous", 401) > 10);
+    }
+
+    #[test]
+    fn limit_rule_caps_rate_per_principal_with_429() {
+        let mut limit = rule("*", "*", "*", "limit");
+        limit.rate = 2.0;
+        let sim = setup(
+            vec![
+                ("client_noisy", vec![stream("n", "noisy", "GET", "/", 10.0)]),
+                ("client_quiet", vec![stream("q", "quiet", "GET", "/", 1.0)]),
+            ],
+            vec![limit],
+            "deny",
+        );
+        run(&sim, 1800); // 30s
+
+        let (noisy_ok, noisy_limited) = (count(&sim, "noisy", 200), count(&sim, "noisy", 429));
+        assert!(noisy_limited > 100, "noisy should be limited, got {}", noisy_limited);
+        assert!(noisy_ok > 30 && noisy_ok < 80, "noisy should get ~2 rps, got {}", noisy_ok);
+        assert_eq!(count(&sim, "quiet", 429), 0, "buckets are per principal");
+        assert!(count(&sim, "quiet", 200) > 15);
+    }
+
+    #[test]
+    fn rule_hits_are_counted_per_rule() {
+        let sim = setup(
+            vec![
+                ("client_alice", vec![stream("a", "alice", "GET", "/", 5.0)]),
+                ("client_bob", vec![stream("b", "bob", "GET", "/", 5.0)]),
+            ],
+            vec![rule("alice", "*", "*", "allow")],
+            "deny",
+        );
+        run(&sim, 600);
+        let hits = sim.inner.borrow().policy_hits();
+        assert_eq!(hits.len(), 1);
+        assert!(hits[0].rule_hits[0] > 20);
+        assert!(hits[0].default_hits > 20);
+    }
+
+    #[test]
+    fn reset_traffic_clears_in_flight_work_and_counts() {
+        let sim = setup(
+            vec![("client_bob", vec![stream("b", "bob", "GET", "/", 5.0)])],
+            vec![],
+            "allow",
+        );
+        run(&sim, 900);
+        assert!(count(&sim, "bob", 200) > 0);
+
+        // Flip to deny. Without a reset, requests already past the policy still reply 200.
+        sim.pending_ops.borrow_mut().push(SimOp::SetNodePolicy("policy_1".into(), vec![], "deny".into(), 0));
+        sim.pending_ops.borrow_mut().push(SimOp::ResetTraffic);
+        sim.tick();
+        {
+            let inner = sim.inner.borrow();
+            assert!(inner.outcome_stats().is_empty());
+            assert!(inner.packets.len() <= 1, "in-flight packets should be gone");
+            assert_eq!(inner.stats.total_processed, 0);
+        }
+
+        run(&sim, 900);
+        assert_eq!(count(&sim, "bob", 200), 0, "nothing from before the change may count");
+        assert!(count(&sim, "bob", 403) > 20);
+    }
+
+    #[test]
+    fn empty_principal_is_counted_for_existing_scenarios() {
+        let sim = Simulation::new();
+        sim.add_edge("client_1".into(), "database_1".into(), "s".into(), "left".into(), 0.0);
+        sim.tick();
+        sim.pending_ops.borrow_mut().push(SimOp::SetNodeStreams(
+            "client_1".into(),
+            vec![stream("s", "", "GET", "/", 5.0)],
+        ));
+        run(&sim, 900);
+        assert!(count(&sim, "", 200) > 0);
     }
 }

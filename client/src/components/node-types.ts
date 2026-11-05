@@ -1,4 +1,4 @@
-import { Smartphone, Server, Database, Zap, Scale, Network, Container, Radio } from 'lucide-react';
+import { Smartphone, Server, Database, Zap, Scale, Network, Container, Radio, ShieldCheck, StickyNote } from 'lucide-react';
 
 export const NODE_TYPES_CONFIG = [
     { type: 'client', label: 'Client', icon: Smartphone, color: 'text-blue-600' },
@@ -9,6 +9,8 @@ export const NODE_TYPES_CONFIG = [
     { type: 'api_gateway', label: 'API Gateway', icon: Network, color: 'text-indigo-600' },
     { type: 'message_queue', label: 'Message Queue', icon: Container, color: 'text-orange-600' },
     { type: 'topic', label: 'Topic (Fan Out)', icon: Radio, color: 'text-pink-600' },
+    { type: 'policy', label: 'Policy (ACL)', icon: ShieldCheck, color: 'text-violet-600' },
+    { type: 'diagram', label: 'Note', icon: StickyNote, color: 'text-slate-500' },
 ];
 
 export interface Endpoint {

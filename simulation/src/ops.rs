@@ -21,6 +21,8 @@ pub enum SimOp {
     SetNodeDependencies(String, Vec<Dependency>),
     SetNodeReplicas(String, u32),
     RemoveNode(String),
+    SetNodePolicy(String, Vec<PolicyRule>, String, u16),
+    ResetTraffic,
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -43,6 +45,43 @@ impl SimulationInner {
                     self.latency_window.clear();
                     self.node_registry.clear();
                     self.id_to_index.clear();
+                    self.outcomes.clear();
+                }
+
+                SimOp::SetNodePolicy(id, rules, default_effect, default_status) => {
+                    if let Some(&idx) = self.id_to_index.get(&id) {
+                        if let Some(node) = self.nodes.get_mut(idx) {
+                            node.policy_rule_hits = vec![0; rules.len()];
+                            node.policy_default_hits = 0;
+                            node.policy_buckets.clear();
+                            node.policy_rules = rules;
+                            node.policy_default_effect = default_effect;
+                            node.policy_default_status = default_status;
+                        }
+                    }
+                }
+
+                // Empties the wires and queues so what's counted next reflects only the
+                // current configuration, with no in-flight packets from before a change.
+                SimOp::ResetTraffic => {
+                    self.packets.clear();
+                    self.outbound_buffer.clear();
+                    self.stats = GlobalStats::default();
+                    self.latency_window.clear();
+                    self.outcomes.clear();
+                    let tick = self.tick_count;
+                    for node in &mut self.nodes {
+                        node.work_queue.clear();
+                        node.route_queues.clear();
+                        node.route_accumulators.clear();
+                        node.current_load = 0;
+                        node.incoming_load = 0.0;
+                        node.total_processed = 0;
+                        node.replica_usage.iter_mut().for_each(|t| *t = tick as f64);
+                        node.policy_rule_hits.iter_mut().for_each(|h| *h = 0);
+                        node.policy_default_hits = 0;
+                        node.policy_buckets.clear();
+                    }
                 }
 
                 SimOp::RemoveNode(id) => {

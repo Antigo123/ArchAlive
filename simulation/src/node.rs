@@ -23,6 +23,8 @@ pub fn infer_type(id: &str) -> NodeType {
         NodeType::ApiGateway
     } else if id.contains("topic") {
         NodeType::Topic
+    } else if id.contains("policy") {
+        NodeType::Policy
     } else {
         NodeType::Server
     }
@@ -76,6 +78,7 @@ pub fn create_default_node(id: &str, server_delay: f32) -> NodeData {
             rate: 5.0,
             accumulator: 0.0,
             retries: 0,
+            principal: String::new(),
         }]
     } else {
         Vec::new()
@@ -100,5 +103,11 @@ pub fn create_default_node(id: &str, server_delay: f32) -> NodeData {
         route_queues: std::collections::HashMap::new(),
         route_accumulators: std::collections::HashMap::new(),
         total_processed: 0,
+        policy_rules: Vec::new(),
+        policy_default_effect: default_policy_effect(),
+        policy_default_status: 0,
+        policy_rule_hits: Vec::new(),
+        policy_default_hits: 0,
+        policy_buckets: std::collections::HashMap::new(),
     }
 }

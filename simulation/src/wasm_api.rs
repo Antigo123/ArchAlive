@@ -92,6 +92,26 @@ impl Simulation {
         }
     }
 
+    pub fn set_node_policy(
+        &self,
+        id: String,
+        rules_val: JsValue,
+        default_effect: String,
+        default_status: u16,
+    ) {
+        if let Ok(rules) = serde_wasm_bindgen::from_value::<Vec<PolicyRule>>(rules_val) {
+            if let Ok(mut ops) = self.pending_ops.try_borrow_mut() {
+                ops.push(SimOp::SetNodePolicy(id, rules, default_effect, default_status));
+            }
+        }
+    }
+
+    pub fn reset_traffic(&self) {
+        if let Ok(mut ops) = self.pending_ops.try_borrow_mut() {
+            ops.push(SimOp::ResetTraffic);
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════════════════════
     // Topology Management
     // ═══════════════════════════════════════════════════════════════════════════
@@ -194,6 +214,24 @@ impl Simulation {
             }
         } else {
             -1
+        }
+    }
+
+    /// Requests per (principal, status): lets a lesson show what actually happened.
+    pub fn get_outcomes(&self) -> JsValue {
+        if let Ok(inner) = self.inner.try_borrow() {
+            serde_wasm_bindgen::to_value(&inner.outcome_stats()).unwrap_or(JsValue::NULL)
+        } else {
+            JsValue::NULL
+        }
+    }
+
+    /// Per-rule decision counts for every Policy node.
+    pub fn get_policy_hits(&self) -> JsValue {
+        if let Ok(inner) = self.inner.try_borrow() {
+            serde_wasm_bindgen::to_value(&inner.policy_hits()).unwrap_or(JsValue::NULL)
+        } else {
+            JsValue::NULL
         }
     }
 

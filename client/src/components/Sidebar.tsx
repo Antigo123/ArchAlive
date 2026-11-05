@@ -1,14 +1,20 @@
 import { ChevronLeft, ChevronRight, Trash2 } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { NODE_TYPES_CONFIG } from './node-types';
 
 interface SidebarProps {
     onClear: () => void;
     allowedNodes?: string[];
+    /** Follows the active tab: a lesson needs the canvas room more than the palette. */
+    autoCollapsed?: boolean;
 }
 
-export function Sidebar({ onClear, allowedNodes }: SidebarProps) {
-    const [collapsed, setCollapsed] = useState(false);
+export function Sidebar({ onClear, allowedNodes, autoCollapsed = false }: SidebarProps) {
+    const [collapsed, setCollapsed] = useState(autoCollapsed);
+
+    useEffect(() => {
+        setCollapsed(autoCollapsed);
+    }, [autoCollapsed]);
 
     const onDragStart = (event: React.DragEvent, nodeType: string) => {
         event.dataTransfer.setData('application/reactflow', nodeType);
